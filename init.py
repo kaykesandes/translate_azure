@@ -3,8 +3,14 @@ import os
 import uuid
 from docx import Document
 from dotenv import load_dotenv
-
+from bs4 import BeautifulSoup
+from langchain_openai.chat_models.azure import AzureChatOpenAI
 load_dotenv()
+
+azure_endpoint = os.getenv('azure_endpoint')
+api_version_azure = os.getenv('api_version_azure')
+api_key_azure = os.getenv('api_key_azure')
+deployment_name = os.getenv( "deployment_name")
 
 subscription_key = os.getenv('subscription_key')
 endpoint = os.getenv('endpoint')
@@ -57,5 +63,48 @@ def translate_document(path):
   translate_doc.save(path_translated)
   return path_translated
 
-input_file = 'document.docx'
-translate_document(input_file)
+
+def extract_text_from_url(url):
+  response = requests.get(url)
+  
+  if response.status_code == 200:
+    soup = BeautifulSoup(response.text, 'html.parser')
+    for scripy_or_style in soup(['script', 'style']):
+      scripy_or_style.decompose()
+    texto = soup.get_text(separator= ' ')
+    
+    linhas = (line.strip() for line in texto.splitlines())
+    parts = (phrase.strip() for line in linhas for phrase in line.split(" "))
+    texto_limpo = '\n'.join(part for part in parts if part)
+    
+    return texto_limpo
+  else:
+      print(f"Failed to fetch the URL. Status code: {response.status_code}")
+      return None
+
+
+client = AzureChatOpenAI(
+  azure_endpoint = azure_endpoint,
+  api_version = api_version_azure,
+  api_key = api_key_azure,
+  deployment_name = deployment_name,
+  max_retries=0
+)
+
+def translate_article(text, target_language):
+  messages = [
+    ('system', "Você atua como tradutor de texto"),
+    ('user', f"traduza o {text} para o idioma {target_language}, e responda em markdown")
+  ]
+  response = client.invoke(messages)
+  print(response.content)
+  return(response.content)
+
+url = "https://dev.to/kenakamu/azure-open-ai-in-vnet-3alo"
+
+text = extract_text_from_url(url)
+article = translate_article(text, target_language)
+
+print(article)
+
+
